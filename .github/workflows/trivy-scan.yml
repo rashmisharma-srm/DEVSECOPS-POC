@@ -1,0 +1,28 @@
+name: Trivy Security Scan (Docker)
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  trivy_scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Trivy using official script
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+          trivy --version
+
+      - name: Trivy Filesystem Scan (Repo Scan)
+        run: |
+          trivy fs --exit-code 1 \
+                   --severity HIGH,CRITICAL \
+                   --no-progress .
