@@ -1,0 +1,57 @@
+name: Semgrep (Docker)
+
+on:
+  push:
+    branches: ["main", "develop", "feature/**"]
+  pull_request:
+    branches: ["main", "develop"]
+
+jobs:
+  semgrep:
+    name: Semgrep SAST (Docker)
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write          # for PR annotations from Semgrep Cloud
+      security-events: write        # if you upload SARIF (optional)
+
+    env:
+      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+      # Optional: set a project name as seen in Semgrep Cloud
+      SEMGREP_REPO_NAME: DEVSECOPS-POC
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Optional: cache docker layers to speed up pulls
+      - name: Pull Semgrep Docker image
+        run: docker pull semgrep/semgrep:latest
+
+      # Run Semgrep Cloud via Docker (no pip install)
+      - name: Run Semgrep CI (Docker)
+        run: |
+          docker run --rm \
+            -e SEMGREP_APP_TOKEN="${SEMGREP_APP_TOKEN}" \
+            -e SEMGREP_REPO_NAME="${SEMGREP_REPO_NAME}" \
+            -v "$PWD:/src" \
+            -w /src \
+            semgrep/semgrep:latest ci
+
+      # (Optional) Create SARIF and upload to GitHub code scanning
+      # This gives you a "Security" tab view in GitHub
+      - name: Run Semgrep to SARIF
+        if: always()    # run even if previous step failed to still upload
+        run: |
+          docker run --rm \
+            -v "$PWD:/src" \
+            -w /src \
+            semgrep/semgrep:latest \
+            semgrep --config auto --sarif -o semgrep.sarif || true
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif

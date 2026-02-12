@@ -1,0 +1,72 @@
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+      - feature/*
+
+pr:
+  branches:
+    include:
+      - main
+      - develop
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  # Optional: give Semgrep a stable project/repo name
+  SEMGREP_REPO_NAME: 'DEVSECOPS-POC'
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+
+  # Ensure Docker is ready (Microsoft-hosted ubuntu has docker preinstalled)
+  - script: |
+      docker version
+    displayName: 'Verify Docker availability'
+
+  - task: Bash@3
+    displayName: 'Pull Semgrep image'
+    inputs:
+      targetType: 'inline'
+      script: |
+        docker pull semgrep/semgrep:latest
+
+  # Primary Semgrep Cloud scan (Docker)
+  - task: Bash@3
+    displayName: 'Run Semgrep CI (Docker)'
+    env:
+      SEMGREP_APP_TOKEN: $(SEMGREP_APP_TOKEN)     # set as a secret variable in pipeline
+      SEMGREP_REPO_NAME: $(SEMGREP_REPO_NAME)
+    inputs:
+      targetType: 'inline'
+      script: |
+        docker run --rm \
+          -e SEMGREP_APP_TOKEN="${SEMGREP_APP_TOKEN}" \
+          -e SEMGREP_REPO_NAME="${SEMGREP_REPO_NAME}" \
+          -v "$(Build.SourcesDirectory):/src" \
+          -w /src \
+          semgrep/semgrep:latest ci
+
+  # (Optional) Generate SARIF artifact for Azure DevOps or external tools
+  - task: Bash@3
+    displayName: 'Generate Semgrep SARIF (optional)'
+    inputs:
+      targetType: 'inline'
+    continueOnError: true
+    script: |
+      docker run --rm \
+        -v "$(Build.SourcesDirectory):/src" \
+        -w /src \
+        semgrep/semgrep:latest \
+        semgrep --config auto --sarif -o semgrep.sarif || true
+
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publish SARIF artifact (optional)'
+    condition: succeededOrFailed()
+    inputs:
+      PathtoPublish: 'semgrep.sarif'
+      ArtifactName: 'semgrep-sarif'
+      publishLocation: 'Container'
