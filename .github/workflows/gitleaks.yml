@@ -1,0 +1,24 @@
+name: Gitleaks Secret Scan
+
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+    branches: ["main", "develop"]
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Important: scan full history
+
+      - name: Run Gitleaks via Docker
+        run: |
+          docker run --rm \
+            -v $PWD:/repo \
+            zricethezav/gitleaks:latest \
+            detect -v --source=/repo --no-banner
